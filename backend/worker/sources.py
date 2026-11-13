@@ -54,12 +54,12 @@ async def simulator_stream(symbols: list[str], rate: float = 20.0) -> AsyncItera
         r = random.random()
         if r < 0.0015:  # sudden price jump (volatility)
             p *= 1 + random.choice([-1, 1]) * random.uniform(0.02, 0.04)
-        elif r < 0.0025:  # start a volume burst for this symbol
-            burst_until[s] = now + 60
+        elif r < 0.0017 and burst_until.get(s, 0) < now - 1800:  # rare volume burst (5 min, x40)
+            burst_until[s] = now + 300
         prices[s] = p
         usd = random.lognormvariate(6.5, 1.3)  # typical ~ $700
         if burst_until.get(s, 0) > now:
-            usd *= 8
+            usd = min(usd * 40, 45_000)  # keep burst trades below whale threshold
         if random.random() < 0.003:  # whale
             usd = random.uniform(55_000, 500_000)
         seq += 1
