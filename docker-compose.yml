@@ -1,0 +1,58 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: crypto
+      POSTGRES_PASSWORD: crypto
+      POSTGRES_DB: cryptomonitor
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./backend/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports: ["5432:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U crypto -d cryptomonitor"]
+      interval: 5s
+      retries: 10
+
+  mongo:
+    image: mongo:7
+    volumes: [mongodata:/data/db]
+    ports: ["27017:27017"]
+
+  worker:
+    build: ./backend/worker
+    env_file: [{path: ./backend/.env, required: false}]
+    environment:
+      PG_DSN: postgresql://crypto:crypto@postgres:5432/cryptomonitor
+      MONGO_URI: mongodb://mongo:27017
+    depends_on:
+      postgres: {condition: service_healthy}
+      mongo: {condition: service_started}
+    restart: unless-stopped
+
+  api:
+    build: ./backend/api
+    env_file: [{path: ./backend/.env, required: false}]
+    environment:
+      PG_DSN: postgresql://crypto:crypto@postgres:5432/cryptomonitor
+    depends_on:
+      postgres: {condition: service_healthy}
+    ports: ["8000:8000"]
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/cryptomonitor.json
+    volumes:
+      - ./backend/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./backend/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports: ["3000:3000"]
+    depends_on: [postgres]
+
+volumes:
+  pgdata:
+  mongodata:
